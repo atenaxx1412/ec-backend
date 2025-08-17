@@ -1,0 +1,41 @@
+# Dependencies
+/vendor/
+/node_modules/
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.development
+
+# Logs
+/logs/
+*.log
+
+# Docker volumes
+mysql_data/
+redis_data/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+/tmp/
+/temp/
+
+# Cache
+/cache/
+
+# Uploads (development)
+/backend/public/uploads/*
+!/backend/public/uploads/.gitkeep
+
+# Test coverage
+/coverage/
