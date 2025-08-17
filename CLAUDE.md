@@ -219,3 +219,98 @@ curl -X POST http://localhost:8080/api/auth/login -H "Content-Type: application/
 - Plan for Stripe payment integration in Phase 4
 - Consider implementing guest checkout workflow
 - Maintain consistent error handling across all endpoints
+
+## GitHub Issues Management
+
+### 基本思想：Epic + 子Issue構造
+開発タスクは**Epic（親Issue）+ 子Issue**の階層構造で管理します：
+
+- **Epic Issue**: プロジェクト全体やフェーズ全体を管理する親Issue
+- **子Issue**: 具体的な開発タスク（1-3日で完了可能な粒度）
+- **明確な依存関係**: 各Issueの前提条件と完了条件を明示
+
+### 推奨ラベル体系
+```bash
+# 優先度ラベル
+priority: high      # 高優先度（必須機能）
+priority: medium    # 中優先度
+priority: low       # 低優先度
+
+# 種別ラベル
+epic        # Epic Issue（プロジェクト管理）
+feature     # 新機能実装
+ui          # UI/UX関連
+chore       # 設定・メンテナンス
+bug         # バグ修正
+
+# 技術領域ラベル
+backend     # バックエンド（PHP/Apache/MySQL）
+frontend    # フロントエンド（Next.js）
+database    # データベース関連
+```
+
+### Epic Issueテンプレート
+```markdown
+# 🚀【Epic】[フェーズ名] 開発
+
+## 🎯 プロジェクトゴール
+- ✅ 明確で測定可能なゴール
+
+## 📋 機能要件リスト（子Issue）
+- [ ] #X [種別] 具体的なタスク名
+
+## 🔄 開発フロー
+依存関係を明確にした進行順序
+
+## 🎯 完了条件 (Definition of Done)
+Epic完了の判断基準
+```
+
+### 子Issueテンプレート
+```markdown
+## 🎯 目的 (Goal)
+このタスクの目的を1-2行で明確に記述
+
+## ✅ タスクリスト (Tasks)
+- [ ] 具体的で実行可能なタスク
+
+## 📚 関連資料 (Related)
+- 親Issue: #X
+- 依存Issue: #Y
+
+## 🎯 完了条件 (Definition of Done)
+1. ✅ 機能が正常に動作する
+2. ✅ テストが通る
+3. ✅ ドキュメントが更新されている
+```
+
+### GitHub CLI による効率的作成
+```bash
+# Epic Issue作成
+gh issue create \
+  --title "🚀【Epic】フェーズ名" \
+  --body "$(cat epic_template.md)" \
+  --label "epic,priority: high"
+
+# 子Issue作成
+gh issue create \
+  --title "[Chore] 具体的なタスク名" \
+  --body "$(cat child_template.md)" \
+  --label "chore,priority: high,backend"
+```
+
+### 現在のEpic: 環境構築
+**Epic #1**: 🚀【Epic】ECサイト環境構築・基盤設定
+- **#2**: Docker環境セットアップ
+- **#3**: Apache + PHP 8.2設定  
+- **#4**: MySQL 8.0設定とデータベース接続確認
+- **#5**: 開発ツール設定（phpMyAdmin, Mailpit, Redis）
+- **#6**: 基本プロジェクト構造作成とCORS設定
+
+### Issue管理ベストプラクティス
+1. **明確で具体的なタイトル**: 何をするのかが一目でわかる
+2. **適切な粒度**: 1-3日で完了できるサイズに分割
+3. **具体的なタスクリスト**: チェックボックス形式で進捗管理
+4. **完了条件の明確化**: Definition of Doneを必ず設定
+5. **定期的な進捗更新**: 最低でも日次で状況報告
+6. **Epic Issueの継続更新**: 子Issue完了時にチェックを更新
