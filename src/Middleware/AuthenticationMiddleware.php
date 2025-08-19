@@ -72,6 +72,10 @@ class AuthenticationMiddleware implements MiddlewareInterface
             'role' => 'customer'  // Default role since table doesn't have role column
         ];
         
+        // Store user in global context for controller access
+        global $__request_context;
+        $__request_context = $request;
+        
         return $next($request);
     }
     
@@ -87,6 +91,7 @@ class AuthenticationMiddleware implements MiddlewareInterface
                 SELECT 
                     id, 
                     first_name, 
+                    last_name,
                     email, 
                     is_active,
                     created_at,
@@ -97,6 +102,12 @@ class AuthenticationMiddleware implements MiddlewareInterface
             
             $stmt->execute([$userId]);
             $user = $stmt->fetch(\PDO::FETCH_ASSOC);
+            
+            if ($user) {
+                // Combine first_name and last_name into name for JWT compatibility
+                $user['name'] = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+                $user['role'] = 'customer'; // Default role
+            }
             
             return $user ?: null;
         } catch (\PDOException $e) {

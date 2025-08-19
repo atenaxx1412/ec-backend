@@ -315,9 +315,17 @@ class Application
                 $controller->setParams($params);
             }
             
-            // Set authenticated user if available
-            if (method_exists($controller, 'setUser') && isset($_SESSION['user'])) {
-                $controller->setUser($_SESSION['user']);
+            // Set authenticated user if available from request (JWT-based auth)
+            if (method_exists($controller, 'setUser')) {
+                // Check for user in request context (set by AuthenticationMiddleware)
+                global $__request_context;
+                if (isset($__request_context['user'])) {
+                    $controller->setUser($__request_context['user']);
+                }
+                // Fallback to session-based auth
+                elseif (isset($_SESSION['user'])) {
+                    $controller->setUser($_SESSION['user']);
+                }
             }
             
             return $controller->$method();

@@ -73,7 +73,7 @@ class CartController extends BaseController
                 throw new ApiException('Product not found', 404, null, [], 'PRODUCT_NOT_FOUND');
             }
             
-            if ($product['status'] !== 'active') {
+            if ($product['is_active'] != 1) {
                 throw new ApiException('Product is not available', 400, null, [], 'PRODUCT_UNAVAILABLE');
             }
             
@@ -96,7 +96,7 @@ class CartController extends BaseController
             // Check if item already exists in cart
             $stmt = $db->prepare("
                 SELECT id, quantity 
-                FROM cart_items 
+                FROM cart 
                 WHERE user_id = ? AND product_id = ?
             ");
             $stmt->execute([$userId, $productId]);
@@ -121,7 +121,7 @@ class CartController extends BaseController
                 }
                 
                 $stmt = $db->prepare("
-                    UPDATE cart_items 
+                    UPDATE cart 
                     SET quantity = ?, updated_at = NOW() 
                     WHERE id = ?
                 ");
@@ -131,7 +131,7 @@ class CartController extends BaseController
             } else {
                 // Add new item
                 $stmt = $db->prepare("
-                    INSERT INTO cart_items (user_id, product_id, quantity, created_at, updated_at) 
+                    INSERT INTO cart (user_id, product_id, quantity, created_at, updated_at) 
                     VALUES (?, ?, ?, NOW(), NOW())
                 ");
                 $stmt->execute([$userId, $productId, $quantity]);
@@ -187,10 +187,10 @@ class CartController extends BaseController
             
             // Get cart item
             $stmt = $db->prepare("
-                SELECT ci.*, p.stock_quantity, p.status, p.name
-                FROM cart_items ci
-                JOIN products p ON ci.product_id = p.id
-                WHERE ci.id = ? AND ci.user_id = ?
+                SELECT c.*, p.stock_quantity, p.is_active, p.name
+                FROM cart c
+                JOIN products p ON c.product_id = p.id
+                WHERE c.id = ? AND c.user_id = ?
             ");
             $stmt->execute([$cartItemId, $userId]);
             $cartItem = $stmt->fetch(\PDO::FETCH_ASSOC);
@@ -199,7 +199,7 @@ class CartController extends BaseController
                 throw new ApiException('Cart item not found', 404, null, [], 'CART_ITEM_NOT_FOUND');
             }
             
-            if ($cartItem['status'] !== 'active') {
+            if ($cartItem['is_active'] != 1) {
                 throw new ApiException('Product is no longer available', 400, null, [], 'PRODUCT_UNAVAILABLE');
             }
             
@@ -218,7 +218,7 @@ class CartController extends BaseController
             
             // Update quantity
             $stmt = $db->prepare("
-                UPDATE cart_items 
+                UPDATE cart 
                 SET quantity = ?, updated_at = NOW() 
                 WHERE id = ?
             ");
@@ -262,7 +262,7 @@ class CartController extends BaseController
             // Check if item exists and belongs to user
             $stmt = $db->prepare("
                 SELECT id, product_id 
-                FROM cart_items 
+                FROM cart 
                 WHERE id = ? AND user_id = ?
             ");
             $stmt->execute([$cartItemId, $userId]);
@@ -273,7 +273,7 @@ class CartController extends BaseController
             }
             
             // Delete cart item
-            $stmt = $db->prepare("DELETE FROM cart_items WHERE id = ?");
+            $stmt = $db->prepare("DELETE FROM cart WHERE id = ?");
             $stmt->execute([$cartItemId]);
             
             $this->logRequest('cart.remove', [
@@ -307,12 +307,12 @@ class CartController extends BaseController
             $db = Database::getConnection();
             
             // Get count before clearing
-            $stmt = $db->prepare("SELECT COUNT(*) FROM cart_items WHERE user_id = ?");
+            $stmt = $db->prepare("SELECT COUNT(*) FROM cart WHERE user_id = ?");
             $stmt->execute([$userId]);
             $itemCount = $stmt->fetchColumn();
             
             // Clear cart
-            $stmt = $db->prepare("DELETE FROM cart_items WHERE user_id = ?");
+            $stmt = $db->prepare("DELETE FROM cart WHERE user_id = ?");
             $stmt->execute([$userId]);
             
             $this->logRequest('cart.clear', [
@@ -365,24 +365,21 @@ class CartController extends BaseController
         $db = Database::getConnection();
         $stmt = $db->prepare("
             SELECT 
-                ci.id,
-                ci.quantity,
-                ci.created_at,
-                ci.updated_at,
+                c.id,
+                c.quantity,
+                c.created_at,
+                c.updated_at,
                 p.id as product_id,
                 p.name,
-                p.slug,
                 p.price,
-                p.compare_price,
-                p.image_url,
                 p.stock_quantity,
-                p.status,
-                c.name as category_name
-            FROM cart_items ci
-            JOIN products p ON ci.product_id = p.id
-            LEFT JOIN categories c ON p.category_id = c.id
-            WHERE ci.user_id = ?
-            ORDER BY ci.created_at ASC
+                p.is_active,
+                cat.name as category_name
+            FROM cart c
+            JOIN products p ON c.product_id = p.id
+            LEFT JOIN categories cat ON p.category_id = cat.id
+            WHERE c.user_id = ?
+            ORDER BY c.created_at ASC
         ");
         
         $stmt->execute([$userId]);
@@ -399,23 +396,20 @@ class CartController extends BaseController
         $db = Database::getConnection();
         $stmt = $db->prepare("
             SELECT 
-                ci.id,
-                ci.quantity,
-                ci.created_at,
-                ci.updated_at,
+                c.id,
+                c.quantity,
+                c.created_at,
+                c.updated_at,
                 p.id as product_id,
                 p.name,
-                p.slug,
                 p.price,
-                p.compare_price,
-                p.image_url,
                 p.stock_quantity,
-                p.status,
-                c.name as category_name
-            FROM cart_items ci
-            JOIN products p ON ci.product_id = p.id
-            LEFT JOIN categories c ON p.category_id = c.id
-            WHERE ci.id = ?
+                p.is_active,
+                cat.name as category_name
+            FROM cart c
+            JOIN products p ON c.product_id = p.id
+            LEFT JOIN categories cat ON p.category_id = cat.id
+            WHERE c.id = ?
         ");
         
         $stmt->execute([$cartItemId]);
@@ -431,7 +425,7 @@ class CartController extends BaseController
     {
         $db = Database::getConnection();
         $stmt = $db->prepare("
-            SELECT id, name, price, stock_quantity, status
+            SELECT id, name, price, stock_quantity, is_active
             FROM products 
             WHERE id = ?
         ");
@@ -448,10 +442,6 @@ class CartController extends BaseController
         $subtotal = $item['price'] * $item['quantity'];
         $savings = 0;
         
-        if ($item['compare_price'] && $item['compare_price'] > $item['price']) {
-            $savings = ($item['compare_price'] - $item['price']) * $item['quantity'];
-        }
-        
         return [
             'id' => (int) $item['id'],
             'quantity' => (int) $item['quantity'],
@@ -460,12 +450,9 @@ class CartController extends BaseController
             'product' => [
                 'id' => (int) $item['product_id'],
                 'name' => $item['name'],
-                'slug' => $item['slug'],
                 'price' => (float) $item['price'],
-                'compare_price' => $item['compare_price'] ? (float) $item['compare_price'] : null,
-                'image_url' => $item['image_url'],
                 'stock_quantity' => (int) $item['stock_quantity'],
-                'status' => $item['status'],
+                'is_active' => (int) $item['is_active'],
                 'category_name' => $item['category_name']
             ],
             'created_at' => $item['created_at'],
@@ -488,7 +475,7 @@ class CartController extends BaseController
             $subtotal += $item['subtotal'];
             $totalSavings += $item['savings'];
             
-            if ($item['product']['stock_quantity'] < $item['quantity'] || $item['product']['status'] !== 'active') {
+            if ($item['product']['stock_quantity'] < $item['quantity'] || $item['product']['is_active'] != 1) {
                 $outOfStockItems++;
             }
         }
