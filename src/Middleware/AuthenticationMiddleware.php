@@ -57,7 +57,7 @@ class AuthenticationMiddleware implements MiddlewareInterface
         }
         
         // Verify user exists and is active in database
-        $user = $this->verifyUserStatus($userData['id']);
+        $user = $this->verifyUserStatus($userData['id'], $userData['role'] ?? 'customer');
         
         if (!$user) {
             throw new ApiException('User not found or inactive', 401, null, [], 'AUTH_USER_NOT_FOUND');
@@ -69,7 +69,7 @@ class AuthenticationMiddleware implements MiddlewareInterface
             'token' => $token,
             'payload' => $payload,
             'user_id' => $user['id'],
-            'role' => 'customer'  // Default role since table doesn't have role column
+            'role' => $user['role'] // Use role from database/token
         ];
         
         // Store user in global context for controller access
@@ -82,31 +82,56 @@ class AuthenticationMiddleware implements MiddlewareInterface
     /**
      * Verify user status in database
      */
-    private function verifyUserStatus(int $userId): ?array
+    private function verifyUserStatus(int $userId, string $role = 'customer'): ?array
     {
-        
         try {
             $db = Database::getConnection();
-            $stmt = $db->prepare("
-                SELECT 
-                    id, 
-                    first_name, 
-                    last_name,
-                    email, 
-                    is_active,
-                    created_at,
-                    updated_at
-                FROM users 
-                WHERE id = ? AND is_active = 1
-            ");
+            
+            // Determine which table to query based on role
+            $isAdminRole = in_array($role, ['admin', 'super_admin', 'moderator']);
+            
+            if ($isAdminRole) {
+                // Query admins table
+                $stmt = $db->prepare("
+                    SELECT 
+                        id, 
+                        name,
+                        email, 
+                        role,
+                        is_active,
+                        created_at,
+                        updated_at
+                    FROM admins 
+                    WHERE id = ? AND is_active = 1
+                ");
+            } else {
+                // Query users table
+                $stmt = $db->prepare("
+                    SELECT 
+                        id, 
+                        first_name, 
+                        last_name,
+                        email, 
+                        is_active,
+                        created_at,
+                        updated_at
+                    FROM users 
+                    WHERE id = ? AND is_active = 1
+                ");
+            }
             
             $stmt->execute([$userId]);
             $user = $stmt->fetch(\PDO::FETCH_ASSOC);
             
             if ($user) {
-                // Combine first_name and last_name into name for JWT compatibility
-                $user['name'] = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
-                $user['role'] = 'customer'; // Default role
+                if ($isAdminRole) {
+                    // Admin user - role already exists in the table
+                    // name field is already set in admins table
+                } else {
+                    // Regular user - combine first_name and last_name into name for JWT compatibility
+                    $user['name'] = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+                    $user['role'] = 'customer'; // Default role for regular users
+                }
             }
             
             return $user ?: null;

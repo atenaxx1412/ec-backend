@@ -448,6 +448,290 @@ public static function extractTokenFromHeader(): ?string {
 - [ ] File upload security (type and size validation)
 - [ ] Rate limiting implementation
 
+## Error Prevention & Troubleshooting Guide
+
+### 🚨 Critical Error Prevention Checklist
+
+#### Before Implementation (必須確認事項)
+1. **Database Schema Verification**
+   ```bash
+   # Always verify table structure before coding
+   docker-compose exec mysql mysql -u ec_dev_user -pdev_password_123 -e "USE ecommerce_dev_db; DESCRIBE table_name;"
+   
+   # Check existing data types and constraints
+   docker-compose exec mysql mysql -u ec_dev_user -pdev_password_123 -e "USE ecommerce_dev_db; SHOW CREATE TABLE table_name;"
+   ```
+
+2. **Column Name Verification**
+   ```bash
+   # Common column name mismatches to check:
+   # orders: status vs is_active
+   # order_items: price vs unit_price
+   # categories: status vs is_active
+   # products: status vs is_active
+   
+   # Quick column check
+   docker-compose exec mysql mysql -u ec_dev_user -pdev_password_123 -e "USE ecommerce_dev_db; SHOW COLUMNS FROM orders LIKE '%price%';"
+   ```
+
+3. **Docker Environment Path Verification**
+   ```bash
+   # Check container directory structure
+   docker-compose exec api ls -la /var/www/html/
+   docker-compose exec api find /var/www/html -name "*.php" -type f | head -10
+   
+   # Host vs Container path mapping
+   # Host: /Users/atena/Desktop/ec-backend/src/tools/script.php
+   # Container: /var/www/html/tools/script.php
+   ```
+
+#### Authentication & JWT Troubleshooting
+
+4. **User Authentication Issues**
+   ```bash
+   # Check existing users and their data
+   docker-compose exec mysql mysql -u ec_dev_user -pdev_password_123 -e "USE ecommerce_dev_db; SELECT id, first_name, email, created_at FROM users LIMIT 5;"
+   
+   # Test with new user registration instead of existing users
+   curl -X POST http://localhost:8080/api/auth/register \
+     -H "Content-Type: application/json" \
+     -d '{"name":"Test User","email":"test@domain.com","password":"TestPass123","password_confirmation":"TestPass123"}'
+   ```
+
+5. **JWT Token Validation**
+   ```bash
+   # Test token validity
+   curl -X GET http://localhost:8080/api/auth/profile \
+     -H "Authorization: Bearer YOUR_TOKEN_HERE"
+   
+   # Check token format (should be 3 parts separated by dots)
+   echo "TOKEN" | cut -d'.' -f1,2,3
+   ```
+
+### 🔧 Database Schema Management
+
+#### MySQL 8.0 Specific Syntax
+```sql
+-- ❌ WRONG: IF NOT EXISTS not supported in ALTER TABLE ADD COLUMN
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS guest_session_id VARCHAR(255);
+
+-- ✅ CORRECT: Check existence first, then add
+SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS 
+WHERE TABLE_NAME = 'orders' AND COLUMN_NAME = 'guest_session_id';
+
+-- If count = 0, then add column
+ALTER TABLE orders ADD COLUMN guest_session_id VARCHAR(255) NULL;
+```
+
+#### Critical Column Mappings (Updated 2025-08-19)
+```bash
+# Current database schema (verified 2025-08-19)
+orders:
+  - id (int, PK)
+  - order_number (varchar(50))
+  - user_id (int, FK to users.id)
+  - guest_session_id (varchar(255))
+  - status (enum: pending,processing,shipped,delivered,cancelled)
+  - total_amount (decimal(10,2))
+  - payment_status (enum: pending,paid,failed,refunded)
+  - shipping_address (json)
+  - billing_address (json)
+  - coupon_code (varchar(50))
+  - coupon_discount (decimal(8,2))
+  - estimated_delivery (date)
+
+order_items:
+  - id (int, PK)
+  - order_id (int, FK)
+  - product_id (int, FK)
+  - quantity (int)
+  - unit_price (decimal(10,2))  # ⚠️ NOT 'price'
+  - total_price (decimal(10,2))
+  - discount_amount (decimal(8,2))
+  - final_price (decimal(10,2))
+  - product_name (varchar(255))
+  - product_sku (varchar(100))
+  - product_image_url (varchar(500))
+
+# New tables for order management
+order_status_history:
+  - id (int, PK)
+  - order_id (int, FK)
+  - previous_status (varchar(50))
+  - new_status (varchar(50))
+  - comment (text)
+  - changed_by_user_id (int, FK)
+  - changed_by_admin_id (int, FK)
+
+inventory_movements:
+  - id (int, PK)
+  - product_id (int, FK)
+  - type (enum: in,out,adjustment)
+  - quantity (int)
+  - previous_stock (int)
+  - new_stock (int)
+  - reason (varchar(255))
+  - reference_type (enum: order,purchase,adjustment,return)
+  - reference_id (int)
+
+order_notifications:
+  - id (int, PK)
+  - order_id (int, FK)
+  - type (enum: confirmation,status_update,shipping,delivery)
+  - method (enum: email,sms,push)
+  - recipient (varchar(255))
+  - subject (varchar(255))
+  - content (text)
+  - status (enum: pending,sent,failed)
+```
+
+### 📁 File Path & Environment Management
+
+#### Docker Container Structure
+```bash
+# Container paths (use these in docker-compose exec commands)
+/var/www/html/                    # Application root
+├── public/                       # Apache document root
+├── src/                         # PHP source code
+│   ├── Controllers/
+│   ├── Config/
+│   └── Utils/
+├── tools/                       # Database scripts
+├── vendor/                      # Composer dependencies
+└── composer.json
+
+# Host paths (for file editing)
+/Users/atena/Desktop/ec-backend/
+├── public/
+├── src/
+├── tools/
+└── docker-compose.yml
+```
+
+#### Common Path Issues
+```bash
+# ❌ WRONG: Trying to access src/tools/ in container
+docker-compose exec api php /var/www/html/src/tools/script.php
+
+# ✅ CORRECT: Use mapped tools/ directory
+docker-compose exec api php /var/www/html/tools/script.php
+
+# Check if file exists before execution
+docker-compose exec api ls -la /var/www/html/tools/
+```
+
+### 🧪 Testing Workflow
+
+#### Pre-Implementation Testing
+```bash
+# 1. Verify API health
+curl -X GET http://localhost:8080/api/health
+
+# 2. Test authentication flow
+curl -X POST http://localhost:8080/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Test","email":"unique@test.com","password":"Test123","password_confirmation":"Test123"}'
+
+# 3. Extract and save token for subsequent tests
+TOKEN="extracted_access_token_here"
+
+# 4. Test protected endpoints
+curl -X GET http://localhost:8080/api/cart \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### Database State Verification
+```bash
+# Before making changes
+docker-compose exec mysql mysql -u ec_dev_user -pdev_password_123 -e "USE ecommerce_dev_db; SELECT COUNT(*) as order_count FROM orders;"
+
+# After changes
+docker-compose exec mysql mysql -u ec_dev_user -pdev_password_123 -e "USE ecommerce_dev_db; SELECT COUNT(*) as order_count FROM orders; SELECT COUNT(*) as history_count FROM order_status_history;"
+```
+
+### 🔍 Error Diagnosis Commands
+
+#### API Error Investigation
+```bash
+# Check Apache error logs
+docker-compose exec api tail -f /var/log/apache2/error.log
+
+# Check MySQL process list for long-running queries
+docker-compose exec mysql mysql -u root -pmysql_root_password -e "SHOW PROCESSLIST;"
+
+# Test database connectivity
+docker-compose exec api php -r "
+try {
+    \$pdo = new PDO('mysql:host=mysql;dbname=ecommerce_dev_db', 'ec_dev_user', 'dev_password_123');
+    echo 'Database connection: SUCCESS\n';
+} catch (Exception \$e) {
+    echo 'Database connection: FAILED - ' . \$e->getMessage() . '\n';
+}
+"
+```
+
+### 🎯 Implementation Best Practices
+
+#### 1. Database-First Approach
+- Always verify table structure before writing queries
+- Use DESCRIBE and SHOW CREATE TABLE commands
+- Test SQL queries in MySQL CLI before implementing in PHP
+
+#### 2. Environment Consistency
+- Use docker-compose exec for all container operations
+- Verify file paths in container before execution
+- Test API endpoints immediately after implementation
+
+#### 3. Authentication Testing
+- Create new test users instead of using existing data
+- Store authentication tokens in environment variables for testing
+- Verify token expiration and refresh workflows
+
+#### 4. Error Handling Strategy
+- Log all database errors with query details
+- Implement comprehensive try-catch blocks
+- Provide clear error messages for debugging
+
+### 📝 Order System Implementation Lessons
+
+#### Issue #7 Error Analysis & Prevention
+
+**Major Errors Encountered:**
+1. **Column Name Mismatch**: `oi.price` vs `oi.unit_price` in order_items table
+2. **MySQL Syntax Issues**: `ADD COLUMN IF NOT EXISTS` not supported in MySQL 8.0
+3. **Docker Path Confusion**: src/tools/ vs tools/ directory mapping
+4. **Authentication Token Issues**: Existing user credentials unknown
+
+**Prevention Measures:**
+```bash
+# 1. ALWAYS verify column names before coding
+docker-compose exec mysql mysql -u ec_dev_user -pdev_password_123 -e "DESCRIBE ecommerce_dev_db.order_items;"
+
+# 2. Test database scripts with proper syntax
+docker-compose exec mysql mysql -u ec_dev_user -pdev_password_123 ecommerce_dev_db < tools/script.sql
+
+# 3. Verify container file paths
+docker-compose exec api ls -la /var/www/html/tools/
+
+# 4. Use new test users for authentication
+curl -X POST http://localhost:8080/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Order Test","email":"order$(date +%s)@test.com","password":"TestPass123","password_confirmation":"TestPass123"}'
+```
+
+**Critical Verification Commands:**
+```bash
+# Before order implementation - run these MANDATORY checks:
+echo "=== Table Structure Verification ==="
+docker-compose exec mysql mysql -u ec_dev_user -pdev_password_123 -e "USE ecommerce_dev_db; DESCRIBE orders; DESCRIBE order_items;"
+
+echo "=== Path Verification ==="
+docker-compose exec api ls -la /var/www/html/tools/
+
+echo "=== API Health Check ==="
+curl -X GET http://localhost:8080/api/health
+```
+
 ## Troubleshooting Guide
 
 ### **CRITICAL ERRORS** (Registration/Authentication Failures)

@@ -159,6 +159,16 @@ class Application
             $router->delete('/{id}', [\ECBackend\Controllers\CartController::class, 'remove']);
             $router->delete('/', [\ECBackend\Controllers\CartController::class, 'clear']);
         });
+        
+        // Order routes
+        $this->router->group('/orders', $authMiddleware, function($router) {
+            $router->get('/', [\ECBackend\Controllers\OrderController::class, 'index']);
+            $router->get('/{id}', [\ECBackend\Controllers\OrderController::class, 'show']);
+            $router->post('/', [\ECBackend\Controllers\OrderController::class, 'create']);
+            $router->put('/{id}/status', [\ECBackend\Controllers\OrderController::class, 'updateStatus']);
+            $router->delete('/{id}', [\ECBackend\Controllers\OrderController::class, 'cancel']);
+            $router->get('/{id}/history', [\ECBackend\Controllers\OrderController::class, 'history']);
+        });
     }
     
     /**

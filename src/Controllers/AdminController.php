@@ -4,6 +4,7 @@ namespace ECBackend\Controllers;
 
 use ECBackend\Config\Database;
 use ECBackend\Utils\SecurityHelper;
+use ECBackend\Utils\JWTHelper;
 use ECBackend\Utils\Response;
 use ECBackend\Exceptions\ApiException;
 use ECBackend\Exceptions\DatabaseException;
@@ -17,9 +18,31 @@ class AdminController extends BaseController
     public function __construct()
     {
         parent::__construct();
-        // Admin routes require authentication and admin role
+        // Most admin routes require authentication and admin role
+        // The login method will handle its own authentication logic
+    }
+    
+    /**
+     * Require admin role (accepts multiple admin role levels)
+     */
+    private function requireAdminRole(): void
+    {
         $this->requireAuth();
-        $this->requireRole('admin');
+        
+        $allowedRoles = ['admin', 'super_admin', 'moderator'];
+        $userRole = $this->user['role'] ?? '';
+        
+        // User role validation for admin functions
+        
+        if (!in_array($userRole, $allowedRoles)) {
+            throw new ApiException(
+                'Admin permissions required',
+                403,
+                null,
+                [],
+                'ADMIN_PERMISSIONS_REQUIRED'
+            );
+        }
     }
     
     /**
@@ -29,8 +52,7 @@ class AdminController extends BaseController
     public function login(): array
     {
         try {
-            // Remove auth requirement for login endpoint
-            $this->user = null;
+            // No authentication required for login endpoint
             
             $this->validateRequired(['email', 'password']);
             
@@ -59,16 +81,16 @@ class AdminController extends BaseController
             $db = Database::getConnection();
             $stmt = $db->prepare("
                 SELECT 
-                    id, name, email, password, role, status,
+                    id, name, email, password_hash, role, is_active,
                     last_login_at, created_at
-                FROM users 
-                WHERE email = ? AND role = 'admin'
+                FROM admins 
+                WHERE email = ?
             ");
             
             $stmt->execute([$email]);
             $admin = $stmt->fetch(\PDO::FETCH_ASSOC);
             
-            if (!$admin || !SecurityHelper::verifyPassword($password, $admin['password'])) {
+            if (!$admin || !SecurityHelper::verifyPassword($password, $admin['password_hash'])) {
                 SecurityHelper::logSecurityEvent('admin_login_failed', [
                     'email' => $email,
                     'ip' => $this->request['client_ip']
@@ -77,20 +99,23 @@ class AdminController extends BaseController
                 throw new ApiException('Invalid admin credentials', 401, null, [], 'INVALID_ADMIN_CREDENTIALS');
             }
             
-            if ($admin['status'] !== 'active') {
+            if ($admin['is_active'] != 1) {
                 SecurityHelper::logSecurityEvent('admin_login_inactive', ['admin_id' => $admin['id']]);
                 throw new ApiException('Admin account is not active', 403, null, [], 'ADMIN_ACCOUNT_INACTIVE');
             }
             
-            // Generate admin token with shorter expiry
-            $token = SecurityHelper::generateToken([
-                'user_id' => $admin['id'],
+            // Generate JWT tokens for admin
+            $userData = [
+                'id' => (int) $admin['id'],
+                'name' => $admin['name'],
                 'email' => $admin['email'],
-                'role' => 'admin'
-            ], 28800); // 8 hours
+                'role' => $admin['role']
+            ];
+            
+            $tokens = JWTHelper::generateTokenPair($userData);
             
             // Update last login
-            $stmt = $db->prepare("UPDATE users SET last_login_at = NOW() WHERE id = ?");
+            $stmt = $db->prepare("UPDATE admins SET last_login_at = NOW() WHERE id = ?");
             $stmt->execute([$admin['id']]);
             
             $adminData = [
@@ -107,9 +132,8 @@ class AdminController extends BaseController
             $this->logRequest('admin.login', ['admin_id' => $admin['id']]);
             
             return $this->success([
-                'token' => $token,
-                'admin' => $adminData,
-                'expires_in' => 28800
+                'tokens' => $tokens,
+                'admin' => $adminData
             ], 'Admin login successful');
             
         } catch (\PDOException $e) {
@@ -127,15 +151,18 @@ class AdminController extends BaseController
      */
     public function dashboard(): array
     {
+        $this->requireAuth();
+        $this->requireAdminRole();
+        
         try {
             $db = Database::getConnection();
             
             // Get basic statistics
             $stats = [
-                'total_products' => $this->getCount('products', ['status' => 'active']),
-                'total_categories' => $this->getCount('categories', ['status' => 'active']),
-                'total_users' => $this->getCount('users', ['role' => 'user', 'status' => 'active']),
-                'low_stock_products' => $this->getCount('products', ['status' => 'active'], 'stock_quantity < 10'),
+                'total_products' => $this->getCount('products', ['is_active' => 1]),
+                'total_categories' => $this->getCount('categories', ['is_active' => 1]),
+                'total_users' => $this->getCount('users', ['is_active' => 1]),
+                'low_stock_products' => $this->getCount('products', ['is_active' => 1], 'stock_quantity < 10'),
                 'recent_orders' => $this->getRecentOrdersCount(),
                 'revenue_today' => $this->getRevenueToday(),
                 'revenue_month' => $this->getRevenueMonth()
@@ -172,6 +199,9 @@ class AdminController extends BaseController
      */
     public function getProducts(): array
     {
+        $this->requireAuth();
+        $this->requireAdminRole();
+        
         try {
             $pagination = $this->getPagination();
             $filters = $this->getAdminProductFilters();
@@ -221,6 +251,9 @@ class AdminController extends BaseController
      */
     public function createProduct(): array
     {
+        $this->requireAuth();
+        $this->requireAdminRole();
+        
         try {
             $this->validateRequired(['name', 'price', 'category_id']);
             
@@ -292,6 +325,9 @@ class AdminController extends BaseController
      */
     public function updateProduct(): array
     {
+        $this->requireAuth();
+        $this->requireAdminRole();
+        
         try {
             $productId = (int) $this->getParam('id');
             $data = $this->sanitizeInput($this->request['body']);
@@ -365,6 +401,9 @@ class AdminController extends BaseController
      */
     public function deleteProduct(): array
     {
+        $this->requireAuth();
+        $this->requireAdminRole();
+        
         try {
             $productId = (int) $this->getParam('id');
             
@@ -443,18 +482,20 @@ class AdminController extends BaseController
         return [
             'id' => (int) $product['id'],
             'name' => $product['name'],
-            'slug' => $product['slug'],
             'description' => $product['description'],
+            'short_description' => $product['short_description'] ?? null,
             'price' => (float) $product['price'],
-            'compare_price' => $product['compare_price'] ? (float) $product['compare_price'] : null,
+            'sale_price' => $product['sale_price'] ? (float) $product['sale_price'] : null,
             'stock_quantity' => (int) $product['stock_quantity'],
             'sku' => $product['sku'],
-            'status' => $product['status'],
+            'is_active' => (int) $product['is_active'],
+            'is_featured' => (int) ($product['is_featured'] ?? 0),
             'image_url' => $product['image_url'],
+            'weight' => $product['weight'] ? (float) $product['weight'] : null,
+            'dimensions' => $product['dimensions'],
             'category' => [
                 'id' => (int) $product['category_id'],
-                'name' => $product['category_name'] ?? null,
-                'slug' => $product['category_slug'] ?? null
+                'name' => $product['category_name'] ?? null
             ],
             'created_at' => $product['created_at'],
             'updated_at' => $product['updated_at']
@@ -482,8 +523,7 @@ class AdminController extends BaseController
         $sql = "
             SELECT 
                 p.*,
-                c.name as category_name,
-                c.slug as category_slug
+                c.name as category_name
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.id
             WHERE 1=1
@@ -492,8 +532,8 @@ class AdminController extends BaseController
         $params = [];
         
         if (!empty($filters['status'])) {
-            $sql .= " AND p.status = ?";
-            $params[] = $filters['status'];
+            $sql .= " AND p.is_active = ?";
+            $params[] = $filters['status'] === 'active' ? 1 : 0;
         }
         
         if (!empty($filters['category_id'])) {
@@ -533,8 +573,8 @@ class AdminController extends BaseController
         $params = [];
         
         if (!empty($filters['status'])) {
-            $sql .= " AND p.status = ?";
-            $params[] = $filters['status'];
+            $sql .= " AND p.is_active = ?";
+            $params[] = $filters['status'] === 'active' ? 1 : 0;
         }
         
         if (!empty($filters['category_id'])) {
@@ -583,27 +623,48 @@ class AdminController extends BaseController
     
     private function getRecentOrdersCount(): int
     {
-        // Placeholder - would need orders table
-        return 0;
+        $db = Database::getConnection();
+        $stmt = $db->prepare("
+            SELECT COUNT(*) 
+            FROM orders 
+            WHERE DATE(created_at) >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        ");
+        $stmt->execute();
+        return (int) $stmt->fetchColumn();
     }
     
     private function getRevenueToday(): float
     {
-        // Placeholder - would need orders table
-        return 0.0;
+        $db = Database::getConnection();
+        $stmt = $db->prepare("
+            SELECT COALESCE(SUM(total_amount), 0) 
+            FROM orders 
+            WHERE DATE(created_at) = CURDATE() 
+            AND status IN ('processing', 'shipped', 'delivered')
+        ");
+        $stmt->execute();
+        return (float) $stmt->fetchColumn();
     }
     
     private function getRevenueMonth(): float
     {
-        // Placeholder - would need orders table
-        return 0.0;
+        $db = Database::getConnection();
+        $stmt = $db->prepare("
+            SELECT COALESCE(SUM(total_amount), 0) 
+            FROM orders 
+            WHERE YEAR(created_at) = YEAR(NOW()) 
+            AND MONTH(created_at) = MONTH(NOW())
+            AND status IN ('processing', 'shipped', 'delivered')
+        ");
+        $stmt->execute();
+        return (float) $stmt->fetchColumn();
     }
     
     private function getRecentProducts(int $limit): array
     {
         $db = Database::getConnection();
         $stmt = $db->prepare("
-            SELECT id, name, price, stock_quantity, status, created_at
+            SELECT id, name, price, stock_quantity, is_active, created_at
             FROM products 
             ORDER BY created_at DESC 
             LIMIT ?
@@ -617,15 +678,21 @@ class AdminController extends BaseController
     {
         $db = Database::getConnection();
         $stmt = $db->prepare("
-            SELECT id, name, email, created_at
+            SELECT id, first_name, last_name, email, created_at
             FROM users 
-            WHERE role = 'user'
             ORDER BY created_at DESC 
             LIMIT ?
         ");
         $stmt->execute([$limit]);
         
-        return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        $users = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        
+        // Process users to add combined name field
+        return array_map(function($user) {
+            $user['name'] = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
+            unset($user['first_name'], $user['last_name']);
+            return $user;
+        }, $users);
     }
     
     private function getLowStockProducts(int $limit): array
@@ -634,7 +701,7 @@ class AdminController extends BaseController
         $stmt = $db->prepare("
             SELECT id, name, stock_quantity, sku
             FROM products 
-            WHERE status = 'active' AND stock_quantity < 10
+            WHERE is_active = 1 AND stock_quantity < 10
             ORDER BY stock_quantity ASC 
             LIMIT ?
         ");
