@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EC Site Development Tools Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+        
+        .tool-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .tool-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+        
+        .tool-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin-bottom: 15px;
+        }
+        
+        .tool-icon.database { background: linear-gradient(45deg, #FF6B6B, #FF8E53); }
+        .tool-icon.email { background: linear-gradient(45deg, #4ECDC4, #44A08D); }
+        .tool-icon.cache { background: linear-gradient(45deg, #A8EDEA, #FED6E3); color: #333; }
+        .tool-icon.api { background: linear-gradient(45deg, #667eea, #764ba2); }
+        
+        .tool-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .tool-description {
+            color: #666;
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+        
+        .tool-status {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-indicator.online { background: #4CAF50; }
+        .status-indicator.offline { background: #F44336; }
+        
+        .tool-links {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .tool-link {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            transition: opacity 0.3s ease;
+        }
+        
+        .tool-link:hover {
+            opacity: 0.8;
+        }
+        
+        .tool-link.secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+        
+        .stats-section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        
+        .stats-title {
+            font-size: 1.5rem;
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        .footer {
+            text-align: center;
+            color: white;
+            opacity: 0.8;
+            margin-top: 30px;
+        }
+        
+        .refresh-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            transition: transform 0.3s ease;
+        }
+        
+        .refresh-btn:hover {
+            transform: scale(1.1);
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .tools-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .tool-links {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛠️ Development Tools Dashboard</h1>
+            <p>EC Site Development Environment - すべての開発ツールを一箇所で管理</p>
+        </div>
+        
+        <div class="tools-grid">
+            <!-- phpMyAdmin Card -->
+            <div class="tool-card">
+                <div class="tool-icon database">🗃️</div>
+                <div class="tool-title">phpMyAdmin</div>
+                <div class="tool-description">
+                    MySQL データベースの管理とクエリ実行。18テーブル、最適化されたインデックス構成でのデータベース操作。
+                </div>
+                <div class="tool-status">
+                    <div class="status-indicator online"></div>
+                    <span>Online - Port 8081</span>
+                </div>
+                <div class="tool-links">
+                    <a href="http://localhost:8081" target="_blank" class="tool-link">管理画面を開く</a>
+                    <a href="http://localhost:8080/api/test-db" target="_blank" class="tool-link secondary">接続テスト</a>
+                </div>
+            </div>
+            
+            <!-- Mailpit Card -->
+            <div class="tool-card">
+                <div class="tool-icon email">📧</div>
+                <div class="tool-title">Mailpit</div>
+                <div class="tool-description">
+                    メール送信のテストと開発。送信済みメールの確認、HTMLメールのプレビュー、多言語対応テスト。
+                </div>
+                <div class="tool-status">
+                    <div class="status-indicator online"></div>
+                    <span>Online - Port 8025</span>
+                </div>
+                <div class="tool-links">
+                    <a href="http://localhost:8025" target="_blank" class="tool-link">メール管理画面</a>
+                    <a href="http://localhost:8080/smtp-test.php" target="_blank" class="tool-link secondary">送信テスト</a>
+                </div>
+            </div>
+            
+            <!-- Redis Card -->
+            <div class="tool-card">
+                <div class="tool-icon cache">⚡</div>
+                <div class="tool-title">Redis Cache</div>
+                <div class="tool-description">
+                    高速キャッシュとセッション管理。商品データキャッシュ、ユーザーセッション、ランキングデータの管理。
+                </div>
+                <div class="tool-status">
+                    <div class="status-indicator online"></div>
+                    <span>Online - Port 6379</span>
+                </div>
+                <div class="tool-links">
+                    <a href="http://localhost:8080/api/test-redis" target="_blank" class="tool-link">接続テスト</a>
+                    <a href="http://localhost:8080/redis-advanced-test.php" target="_blank" class="tool-link secondary">高度テスト</a>
+                </div>
+            </div>
+            
+            <!-- API Service Card -->
+            <div class="tool-card">
+                <div class="tool-icon api">🚀</div>
+                <div class="tool-title">API Service</div>
+                <div class="tool-description">
+                    Apache + PHP 8.2 API サーバー。商品・カテゴリ・注文管理、認証システム、CORS対応の RESTful API。
+                </div>
+                <div class="tool-status">
+                    <div class="status-indicator online"></div>
+                    <span>Online - Port 8080</span>
+                </div>
+                <div class="tool-links">
+                    <a href="http://localhost:8080/api/health" target="_blank" class="tool-link">ヘルスチェック</a>
+                    <a href="http://localhost:8080/api/products" target="_blank" class="tool-link secondary">商品API</a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Stats Section -->
+        <div class="stats-section">
+            <div class="stats-title">📊 システム統計</div>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value" id="database-tables">18</div>
+                    <div class="stat-label">データベーステーブル</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="api-endpoints">8</div>
+                    <div class="stat-label">APIエンドポイント</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="email-sent">2</div>
+                    <div class="stat-label">送信済みメール</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="redis-keys">15+</div>
+                    <div class="stat-label">Redisキャッシュ</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">100%</div>
+                    <div class="stat-label">サービス稼働率</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">35ms</div>
+                    <div class="stat-label">Redis レスポンス</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="stats-section">
+            <div class="stats-title">🔧 クイックアクション</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                <a href="http://localhost:8080/api/health" target="_blank" class="tool-link" style="text-align: center; padding: 15px;">
+                    システム全体ヘルスチェック
+                </a>
+                <a href="http://localhost:8080/api/products" target="_blank" class="tool-link secondary" style="text-align: center; padding: 15px;">
+                    商品データ確認
+                </a>
+                <a href="http://localhost:8080/api/categories" target="_blank" class="tool-link" style="text-align: center; padding: 15px;">
+                    カテゴリデータ確認
+                </a>
+                <a href="javascript:void(0)" onclick="runBackup()" class="tool-link secondary" style="text-align: center; padding: 15px;">
+                    データベースバックアップ
+                </a>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>🌟 EC Site Development Environment - All systems operational</p>
+            <p>最終更新: <span id="last-updated"></span></p>
+        </div>
+    </div>
+    
+    <button class="refresh-btn" onclick="location.reload()" title="ページを更新">🔄</button>
+    
+    <script>
+        // Update timestamp
+        document.getElementById('last-updated').textContent = new Date().toLocaleString('ja-JP');
+        
+        // Auto-refresh stats every 30 seconds
+        setInterval(updateStats, 30000);
+        
+        function updateStats() {
+            // Update Mailpit message count
+            fetch('http://localhost:8025/api/v1/info')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('email-sent').textContent = data.Messages || 0;
+                })
+                .catch(console.error);
+                
+            // Update timestamp
+            document.getElementById('last-updated').textContent = new Date().toLocaleString('ja-JP');
+        }
+        
+        function runBackup() {
+            if (confirm('データベースのフルバックアップを実行しますか？')) {
+                alert('バックアップ機能は tools/backup-system.sh から実行してください。');
+            }
+        }
+        
+        // Check service status on load
+        window.addEventListener('load', function() {
+            // Check each service and update status indicators
+            const services = [
+                { url: 'http://localhost:8081', indicator: 0 },
+                { url: 'http://localhost:8025', indicator: 1 },
+                { url: 'http://localhost:8080/api/test-redis', indicator: 2 },
+                { url: 'http://localhost:8080/api/health', indicator: 3 }
+            ];
+            
+            services.forEach((service, index) => {
+                fetch(service.url)
+                    .then(response => {
+                        const indicators = document.querySelectorAll('.status-indicator');
+                        if (response.ok) {
+                            indicators[index].className = 'status-indicator online';
+                        } else {
+                            indicators[index].className = 'status-indicator offline';
+                        }
+                    })
+                    .catch(() => {
+                        const indicators = document.querySelectorAll('.status-indicator');
+                        indicators[index].className = 'status-indicator offline';
+                    });
+            });
+        });
+    </script>
+</body>
+</html>

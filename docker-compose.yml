@@ -1,0 +1,91 @@
+services:
+  # API Service (Apache + PHP 8.2)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ec_api
+    ports:
+      - "8080:80"
+    volumes:
+      - ./src:/var/www/html
+      - ./public:/var/www/html/public
+      - ./config/apache:/etc/apache2/sites-available
+      - ./logs/apache:/var/log/apache2
+    environment:
+      - APACHE_DOCUMENT_ROOT=/var/www/html/public
+      - PHP_DISPLAY_ERRORS=1
+      - PHP_ERROR_REPORTING=E_ALL
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - ec_network
+
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: ec_mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password_dev
+      MYSQL_DATABASE: ecommerce_dev_db
+      MYSQL_USER: ec_dev_user
+      MYSQL_PASSWORD: dev_password_123
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./config/mysql:/etc/mysql/conf.d
+      - ./tools/db-setup.sql:/docker-entrypoint-initdb.d/setup.sql
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    networks:
+      - ec_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: ec_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ec_network
+
+  # phpMyAdmin for database management
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: ec_phpmyadmin
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD: root_password_dev
+      PMA_ARBITRARY: 1
+    depends_on:
+      - mysql
+    networks:
+      - ec_network
+
+  # Mailpit for email testing
+  mailpit:
+    image: axllent/mailpit
+    container_name: ec_mailpit
+    ports:
+      - "8025:8025"  # Web UI
+      - "1025:1025"  # SMTP
+    networks:
+      - ec_network
+
+# Volumes for data persistence
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# Networks
+networks:
+  ec_network:
+    driver: bridge

@@ -1,0 +1,29 @@
+{
+    "type": "full",
+    "timestamp": "20250818_071750",
+    "database": "ecommerce_dev_db",
+    "file": "full_backup_20250818_071750.sql.gz",
+    "size": " 16K",
+    "created_at": "2025-08-18T07:17:51+09:00",
+    "tables": [
+        "active_products",
+        "admins",
+        "analytics_daily",
+        "cart",
+        "categories",
+        "coupons",
+        "featured_products",
+        "inventory_movements",
+        "order_items",
+        "orders",
+        "product_attributes",
+        "product_categories",
+        "product_reviews",
+        "product_views",
+        "products",
+        "products_with_reviews",
+        "user_addresses",
+        "users",
+        "wishlist"
+    ]
+}

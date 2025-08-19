@@ -1,0 +1,160 @@
+# EC Site API .htaccess Configuration
+# Apache Rewrite Rules for PHP API
+
+# Enable rewrite engine
+RewriteEngine On
+
+# Security: Block access to sensitive files
+<FilesMatch "^\.">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# Block access to config and tools directories from web
+RewriteRule ^(config|tools|logs|src)(/|$) - [F,L]
+
+# Block access to specific file types
+<FilesMatch "\.(env|md|sql|log|bak|backup|ini|conf)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# CORS Headers for Development
+Header always set Access-Control-Allow-Origin "*"
+Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control, X-File-Name, X-File-Size, X-File-Type"
+Header always set Access-Control-Max-Age "86400"
+Header always set Access-Control-Allow-Credentials "true"
+
+# Enable Authorization header for PHP
+RewriteEngine On
+RewriteCond %{HTTP:Authorization} ^(.+)$
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Handle preflight OPTIONS requests
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^(.*)$ - [R=200,L]
+
+# Security Headers
+Header always set X-Content-Type-Options "nosniff"
+Header always set X-Frame-Options "SAMEORIGIN"
+Header always set X-XSS-Protection "1; mode=block"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"
+Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' ws: wss:;"
+
+# Development Cache Control (disable caching)
+Header always set Cache-Control "no-cache, no-store, must-revalidate, max-age=0"
+Header always set Pragma "no-cache"
+Header always set Expires "0"
+
+# API Routing
+# Route all requests to index.php for Application handling
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_URI} !^/index\.php$
+RewriteRule ^(.*)$ /index.php [QSA,L]
+
+# Note: All routing is now handled by the Application class
+# Frontend routing will be handled separately when frontend is deployed
+
+# PHP Configuration Overrides
+# Error handling for development
+php_flag display_errors On
+php_flag display_startup_errors On
+php_value error_reporting "E_ALL"
+php_flag log_errors On
+php_value error_log "/var/log/apache2/php_errors.log"
+
+# Performance settings
+php_value memory_limit "512M"
+php_value max_execution_time "300"
+php_value max_input_time "300"
+php_value max_input_vars "3000"
+
+# File upload settings
+php_value upload_max_filesize "64M"
+php_value post_max_size "64M"
+php_value file_uploads "On"
+php_value max_file_uploads "20"
+
+# Session settings
+php_value session.auto_start "0"
+php_value session.cookie_lifetime "0"
+php_value session.cookie_secure "0"
+php_value session.cookie_httponly "1"
+php_value session.use_strict_mode "1"
+php_value session.cookie_samesite "Lax"
+
+# Output buffering
+php_value output_buffering "4096"
+php_flag output_compression "On"
+
+# Date/Time settings
+php_value date.timezone "Asia/Tokyo"
+
+# Charset settings
+php_value default_charset "UTF-8"
+php_value mbstring.internal_encoding "UTF-8"
+php_value mbstring.http_output "UTF-8"
+
+# Database connection settings
+php_value mysql.default_socket "/var/run/mysqld/mysqld.sock"
+php_value mysqli.default_socket "/var/run/mysqld/mysqld.sock"
+php_value pdo_mysql.default_socket "/var/run/mysqld/mysqld.sock"
+
+# Mail settings (Mailpit)
+php_value SMTP "mailpit"
+php_value smtp_port "1025"
+php_value sendmail_path "/usr/sbin/sendmail -t -i -S mailpit:1025"
+
+# Compression for static files
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/xml
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE application/xhtml+xml
+    AddOutputFilterByType DEFLATE application/rss+xml
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/x-javascript
+    AddOutputFilterByType DEFLATE application/json
+</IfModule>
+
+# Browser caching for static assets (when deployed)
+<IfModule mod_expires.c>
+    ExpiresActive on
+    # Cache images for 1 month
+    ExpiresByType image/jpg "access plus 1 month"
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/gif "access plus 1 month"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/webp "access plus 1 month"
+    # Cache CSS and JS for 1 week
+    ExpiresByType text/css "access plus 1 week"
+    ExpiresByType application/pdf "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 week"
+    ExpiresByType application/x-javascript "access plus 1 week"
+    # Cache fonts for 1 year
+    ExpiresByType application/x-font-woff "access plus 1 year"
+    ExpiresByType application/font-woff2 "access plus 1 year"
+</IfModule>
+
+# Prevent access to backup files
+<FilesMatch ".*\.(bak|backup|old|tmp|temp)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# Directory listing prevention
+Options -Indexes
+
+# Follow symbolic links (if needed)
+Options +FollowSymLinks
+
+# Custom error pages (optional)
+# ErrorDocument 400 /error/400.html
+# ErrorDocument 401 /error/401.html
+# ErrorDocument 403 /error/403.html
+# ErrorDocument 404 /error/404.html
+# ErrorDocument 500 /error/500.html
